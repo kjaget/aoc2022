@@ -1,0 +1,13 @@
+*~
+build.ninja
+CMakeCache.txt
+CMakeFiles
+cmake_install.cmake
+compile_commands.json
+rules.ninja
+*sw?
+x
+y
+z
+p1
+p2
