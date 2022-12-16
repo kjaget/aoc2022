@@ -94,8 +94,13 @@ public:
         return (val >= (start_ - 1)) && (val <= (end_ + 1));
     }
     
-    long start_;
-    long end_;
+    T start_;
+    T end_;
+    friend std::ostream& operator<<(std::ostream &os, const RangeEl &re)
+    {
+        os << "(" << re.start_ << "->" << re.end_ << ")";
+        return os;
+    }
 };
 
 template <typename T>
@@ -109,27 +114,33 @@ public:
     }
     void insert(const T start, const T end)
     {
+        //std::cout << "        insert start = " << start << " end = " << end << " before = " << *this << std::endl;
         for (size_t i = 0; i < range_.size(); i++)
         {
             if (range_[i].adjacent_or_in(start) || range_[i].adjacent_or_in(end))
             {
                 range_[i].start_ = std::min(start, range_[i].start_);
                 range_[i].end_ = std::max(end, range_[i].end_);
-                while ((i > 0) && (range_[i-1].end_ >= range_[i].start_))
+                // std::cout << " i = " << i << " range[i] = " << range_[i] << std::endl;
+                while ((i > 0) && (range_[i - 1].end_ >= range_[i].start_))
                 {
-                    range_[i].start_ = std::min(range_[i].start_, range_[i-1].start_);
+                    range_[i].start_ = std::min(range_[i].start_, range_[i - 1].start_);
+                    // std::cout << "  updating start to " << range_[i].start_ << " removing " << i - 1 << std::endl;
                     range_.erase(range_.begin() + i - 1);
+                    i -= 1;
                 }
-                while ((i < (range_.size() - 1)) && (range_[i].end_ >= range_[i+1].start_))
+                while ((i < (range_.size() - 1)) && (range_[i].end_ >= range_[i + 1].start_))
                 {
-                    range_[i].end_ = std::max(range_[i].end_, range_[i+1].end_);
+                    range_[i].end_ = std::max(range_[i].end_, range_[i + 1].end_);
                     range_.erase(range_.begin() + i + 1);
                 }
+                // std::cout << "        insert after1 = " << *this << std::endl;
                 return;
             }
         }
         range_.push_back(RangeEl(start, end));
         std::sort(range_.begin(), range_.end());
+        // std::cout << "        insert after2 = " << *this << std::endl;
     }
     void insert(const std::vector<RangeEl<T>>::const_iterator begin,
                 const std::vector<RangeEl<T>>::const_iterator end)
@@ -185,6 +196,33 @@ public:
                                { return a + t.size(); }
         );
     }
+    std::optional<long> find_gap(long max_coord) const
+    {
+        if (range_.size() == 2)
+        {
+            return range_[0].end_ + 1;
+        }
+        if (range_[0].start_ != 0)
+        {
+            return 0;
+        }
+        if (range_[0].end_ != max_coord)
+        {
+            return max_coord;
+        }
+        return std::nullopt;
+    }
+    friend std::ostream& operator<<(std::ostream &os, const Range<T> &r)
+    {
+        std::cerr << " size = " << r.range_.size() << std::endl;
+        for (size_t i = 0; i < r.range_.size(); i++)
+        {
+        std::cerr << " i = " << i << std::endl;
+            os << r.range_[i] << " ";
+        }
+        os << std::endl;
+        return os;
+    }
 private:
     std::vector<RangeEl<T>> range_;
 };
@@ -213,23 +251,38 @@ public:
     {
         Range<long> ret;
         const auto l1_d = l1_distance();
-        for (long r = (sensor_.y_ - l1_d); r <= (sensor_.y_ + l1_d); r++)
+        const long width = l1_d - std::abs(sensor_.y_ - row);
+        if (width >= 0)
         {
-            if (r == row)
+            long min_col = sensor_.x_ - width;
+            long max_col = sensor_.x_ + width;
+            if (max_col >= min_col)
             {
-                //std::cout << "Sensor at " << sensor_ << " hits row " << row << std::endl;
-                for (long c = (sensor_.x_ - l1_d); c <= (sensor_.x_ + l1_d); c++)
-                {
-                    if (sensor_.l1_distance(Coord(c, r)) <= l1_d)
-                    {
-                        //std::cout << "  adding " << c << " to set" << std::endl;
-                        ret.insert(c);
-                    }
-                }
+                ret.insert(min_col, max_col);
             }
         }
         return ret;
     }
+    void update_map(std::vector<Range<long>> &map, long max_coord) const
+    {
+        const auto l1_d = l1_distance();
+        for (long r = (sensor_.y_ - l1_d); r <= (sensor_.y_ + l1_d); r++)
+        {
+            //std::cout << "    r = " << r << std::endl;
+            if ((r >= 0) && (r <= max_coord))
+            {
+                const long width = l1_d - std::abs(sensor_.y_ - r);
+                //std::cout << "        width = " << width << std::endl;
+                const long min_col = std::max(sensor_.x_ - width, 0L);
+                const long max_col = std::min(sensor_.x_ + width, max_coord);
+                if (max_col >= min_col)
+                {
+                    map[r].insert(min_col, max_col);
+                }
+            }
+        }
+    }
+
     void remove_sensor_and_beacon_from_set(Range<long> &s, const long row) const
     {
         if (sensor_.y_ == row)
@@ -240,7 +293,6 @@ public:
         {
             s.erase(beacon_.x_);
         }
-        //std::cout << "Removing " << sensor_.x_ << " and " << beacon_.x_ << std::endl;
     }
     friend std::ostream &operator<<(std::ostream &os, const SensorAndBeacon &sb);
 
@@ -276,22 +328,35 @@ public:
             
             ret.insert(r.cbegin(), r.cend());
             #if 0
-            std::copy(r.begin(), r.end(), std::ostream_iterator<long>(std::cout, " "));
+            std::cout << "r : ";
+            std::copy(r.cbegin(), r.cend(), std::ostream_iterator<RangeEl<long>>(std::cout, " "));
             std::cout << std::endl;
-            std::copy(ret.begin(), ret.end(), std::ostream_iterator<long>(std::cout, " "));
+            std::cout << "ret : ";
+            std::copy(ret.cbegin(), ret.cend(), std::ostream_iterator<RangeEl<long>>(std::cout, " "));
             std::cout << std::endl;
             #endif
         }
-        std::cout <<" before " << ret.size() << std::endl;
+        //std::cout <<" before " << ret.size() << std::endl;
         for (const auto &sb : sensor_and_beacons_)
         {
             sb.remove_sensor_and_beacon_from_set(ret, row);
             #if 0
-            std::copy(ret.begin(), ret.end(), std::ostream_iterator<long>(std::cout, " "));
+            std::copy(ret.cbegin(), ret.cend(), std::ostream_iterator<RangeEl<long>>(std::cout, " "));
             std::cout << std::endl;
             #endif
         }
-        std::cout <<" after " << ret.size() << std::endl;
+        //std::cout <<" after " << ret.size() << std::endl;
+        return ret;
+    }
+
+    std::vector<Range<long>> get_ranges(long max_coord) const
+    {
+        std::vector<Range<long>> ret(max_coord + 1);
+        for (const auto &sb : sensor_and_beacons_)
+        {
+            std::cout << "Updating sensor " << sb << std::endl;
+            sb.update_map(ret, max_coord);
+        }
         return ret;
     }
 
@@ -304,7 +369,7 @@ std::ostream& operator<<(std::ostream &os, const Map &m)
 {
     for (const auto &sb : m.sensor_and_beacons_)
     {
-        std::cout << sb << std::endl;
+        os << sb << std::endl;
     }
     return os;
 }
@@ -313,6 +378,21 @@ int main(int argc, char **argv)
 {
     Map map(argv[1]);
     std::cout << map << std::endl;
-    std::cout << "Num invalid spaces in row " << map.not_on_row(atoi(argv[2])).size() << std::endl;
+    const long row_number = atol(argv[2]);
+    auto invalid_spaces = map.not_on_row(row_number).size();
+    std::cout << "Num invalid spaces in row " << row_number << " = " << invalid_spaces << std::endl;
+
+    const long max_coord = atol(argv[3]);
+    std::vector<Range<long>> ranges = map.get_ranges(max_coord);
+    for (long y = 0; y <= max_coord; y++)
+    {
+        auto ret = ranges[y].find_gap(max_coord);
+        if (ret)
+        {
+            std::cout << "x = " << *ret << " y = " << y << std::endl;
+            std::cout << " product = " << *ret * 4000000 + y << std::endl;
+            break;
+        }
+    }
     return 0;
 }
