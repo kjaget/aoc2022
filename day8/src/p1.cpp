@@ -52,6 +52,19 @@ public:
 
     }
 
+    size_t generate_scenic_score(void) const
+    {
+        size_t ret = 1;
+        for (size_t row = 1; (row < map_.size() - 1); row++)
+        {
+            for (size_t col = 1; (col < map_[0].size() - 1); col++)
+            {
+                ret = std::max(ret, generate_coord_scenic_score(row, col));
+            }
+        }
+        return ret;
+    }
+
     void print(void) const
     {
         std::cout  << "Map:" << std::endl;
@@ -165,7 +178,7 @@ private:
             vis_map_[r][vis_map_[0].size() - 2] = true;
         }
 
-        for (size_t r = 2; r < rows - 1; r++)
+        for (size_t r = 2; r < rows - 2; r++)
         {
             auto &row = vis_map_[r];
             auto &m_row = map_[r];
@@ -178,6 +191,38 @@ private:
             }
         }
     }
+
+    size_t generate_coord_scenic_score(size_t row, size_t col) const
+    {
+        size_t ret = 1;
+        for (const auto &dir : directions_)
+        {
+            ret *= generate_coord_direction_scenic_score(row, col, dir);
+        }
+        return ret;
+    }
+
+    size_t generate_coord_direction_scenic_score(size_t row, size_t col, const Direction &dir) const
+    {
+        const auto starting_height = map_[row][col];
+        size_t ret = 0;
+        while (true)
+        {
+            row += dir.dr_;
+            col += dir.dc_;
+            if ((row == 0) || (row >= (map_.size() - 1)) || (col == 0) || (col >= (map_[0].size() - 1)))
+            {
+                break;
+            }
+            ret += 1;
+
+            if (map_[row][col] >= starting_height)
+            {
+                break;
+            }
+        }
+        return ret;
+    }
 };
 
 int main(int argc, char **argv)
@@ -185,4 +230,5 @@ int main(int argc, char **argv)
     ForestMap forest_map(argv[1]);
     forest_map.print();
     std::cout << "Count = " << forest_map.count() << std::endl;
+    std::cout << "Max Scenic Score = " << forest_map.generate_scenic_score() << std::endl;
 }
